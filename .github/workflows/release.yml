@@ -1,0 +1,145 @@
+# 네 가지 빌드를 한 번에 만든다.
+#
+#   macOS Apple Silicon (arm64)   macos-14 러너
+#   macOS Intel (x86_64)          macos-13 러너
+#   Windows x64                   windows-latest
+#   Windows ARM64                 windows-11-arm
+#
+# 하나로 합친 유니버설 맥 앱은 못 만든다 — numpy 2.x가 universal2 휠을 내지
+# 않아 아키텍처별로 따로 빌드해야 한다.
+#
+# 손으로 실행하면 Artifacts에 올라가고, v1.0.0 같은 태그를 밀면 Releases에
+# 파일이 붙는다.
+name: 빌드
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  mac:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            arch: arm64
+            label: Apple Silicon
+          - runner: macos-13
+            arch: x86_64
+            label: Intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: 의존성 설치
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: 테스트
+        run: python test_studyai.py
+
+      # ScreenCaptureKit 오디오 탭은 macOS 13부터라 타깃을 13으로 잡는다.
+      - name: Swift 헬퍼 컴파일
+        run: swiftc -O -target ${{ matrix.arch }}-apple-macos13 audio_capture.swift -o audio_capture
+
+      - name: 빌드
+        run: python -m PyInstaller --noconfirm --clean StudyAI.spec
+
+      # 한국어 번들로 인식시켜야 저장 패널이 한국어로 뜬다.
+      - name: 한국어 번들 + 서명
+        run: |
+          APP="dist/Study AI.app"
+          mkdir -p "$APP/Contents/Resources/ko.lproj"
+          printf '"CFBundleName" = "Study AI";\n"CFBundleDisplayName" = "Study AI";\n' \
+            > "$APP/Contents/Resources/ko.lproj/InfoPlist.strings"
+          codesign -f -s - -i com.superbleo.studyai.audiocapture "$APP/Contents/Frameworks/audio_capture"
+          codesign -f -s - -i com.superbleo.studyai --deep "$APP"
+
+      - name: 아키텍처 확인
+        run: |
+          got=$(lipo -archs "dist/Study AI.app/Contents/MacOS/StudyAI")
+          echo "본체: $got"
+          [ "$got" = "${{ matrix.arch }}" ] || { echo "::error::${{ matrix.arch }} 가 아니라 $got"; exit 1; }
+
+      - name: dmg 만들기
+        run: |
+          STAGE=$(mktemp -d)
+          cp -R "dist/Study AI.app" "$STAGE/"
+          NEED="- ${{ matrix.label }} 맥 전용입니다. 다른 맥에서는 다른 파일을 쓰세요."
+          sed "s|{NEED}|$NEED|" "packaging/읽어주세요-mac.txt" > "$STAGE/읽어주세요.txt"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "Study AI" -srcfolder "$STAGE" -ov -format UDZO \
+                         -imagekey zlib-level=9 "Study AI (${{ matrix.label }}).dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macOS-${{ matrix.arch }}
+          path: "*.dmg"
+
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            arch: x64
+          - runner: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          architecture: ${{ matrix.arch }}
+
+      - name: 의존성 설치
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: 테스트
+        run: python test_studyai.py
+
+      - name: 빌드
+        run: python -m PyInstaller --noconfirm --clean StudyAI-win.spec
+
+      - name: 안내문 넣기
+        shell: pwsh
+        run: Copy-Item "packaging/읽어주세요-windows.txt" "dist/StudyAI/읽어주세요.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Windows-${{ matrix.arch }}
+          path: dist/StudyAI
+
+  release:
+    needs: [mac, windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+
+      - name: 윈도우 빌드는 zip으로 묶는다
+        run: |
+          cd out
+          for d in Windows-*; do (cd "$d" && zip -qr "../StudyAI-$d.zip" .); done
+          ls -R . | head -20
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/**/*.dmg
+            out/*.zip
