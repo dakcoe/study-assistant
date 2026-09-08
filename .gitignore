@@ -1,0 +1,23 @@
+# 빌드 결과물
+build/
+build-x86/
+dist/
+dist-x86/
+
+# 컴파일한 헬퍼 — 소스(audio_capture.swift)에서 만든다
+audio_capture
+audio_capture_x86
+
+# 파이썬
+__pycache__/
+*.py[cod]
+.venv/
+.venv-x86/
+
+# 소스로 실행하면 생기는 것 — settings.json 에는 API 키가 들어간다
+settings.json
+usage.json
+notes/
+error.log
+
+.DS_Store

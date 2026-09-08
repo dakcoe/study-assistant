@@ -1,0 +1,8 @@
+customtkinter
+sounddevice
+numpy
+requests
+
+# Windows 전용 — 스피커로 나가는 소리를 되받는다(WASAPI 루프백).
+# sounddevice(PortAudio)는 루프백 플래그를 노출하지 않는다.
+soundcard; sys_platform == "win32"
