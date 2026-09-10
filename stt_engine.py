@@ -83,6 +83,15 @@ def helper_path():
     return path
 
 
+def _resample(block, out_len):
+    """길이만 맞춰 다시 뽑는다. 선형 보간이면 받아적기에는 충분하다."""
+    if len(block) == out_len:
+        return block
+    src = np.linspace(0.0, 1.0, num=len(block), endpoint=False)
+    dst = np.linspace(0.0, 1.0, num=out_len, endpoint=False)
+    return np.interp(dst, src, block).astype(np.float32)
+
+
 def app_sources():
     """소리를 잡을 수 있는 실행 중인 앱 [(bundleID, 표시이름)]. 실패하면 빈 목록.
 
@@ -329,19 +338,41 @@ class STTEngine:
             return False
 
         def loop():
-            try:
-                with mic.recorder(samplerate=SAMPLE_RATE, channels=1,
-                                  blocksize=BLOCK_SIZE) as rec:
-                    while self._running:
-                        data = rec.record(numframes=BLOCK_SIZE)
-                        # soundcard는 (프레임, 채널) 2차원으로 준다
-                        target.put(np.asarray(data, dtype=np.float32).reshape(-1))
-            except Exception as e:
-                self._on_error(f"시스템 소리 캡처가 끊겼습니다: {e}")
-            finally:
-                target.put(None)
+            # 공유 모드 루프백은 장치의 믹스 포맷(보통 48kHz 스테레오)을 내준다.
+            # 16kHz 모노를 달라고 하면 장치에 따라 거부당하므로, 주는 대로 받아
+            # 우리가 모노로 합치고 16kHz로 줄인다. 앞의 조합부터 차례로 시도한다.
+            started = False
+            last = None
+            for rate, channels in ((SAMPLE_RATE, 1), (48000, None), (44100, None)):
+                # 한 번 읽을 때마다 16kHz 기준 한 블록이 나오도록 프레임 수를 맞춘다
+                frames = max(1, round(BLOCK_SIZE * rate / SAMPLE_RATE))
+                try:
+                    with mic.recorder(samplerate=rate, channels=channels,
+                                      blocksize=frames) as rec:
+                        started = True
+                        while self._running:
+                            block = np.asarray(rec.record(numframes=frames),
+                                               dtype=np.float32)
+                            if block.ndim > 1:          # (프레임, 채널) → 모노
+                                block = block.mean(axis=1)
+                            if rate != SAMPLE_RATE:
+                                block = _resample(block, BLOCK_SIZE)
+                            target.put(block)
+                    return                              # 정상 종료
+                except Exception as e:
+                    last = e
+                    if started:                         # 돌다가 끊긴 것은 재시도 안 한다
+                        self._on_error(f"시스템 소리 캡처가 끊겼습니다: {e}")
+                        return
+            self._on_error(f"시스템 소리를 열 수 없습니다: {last}")
 
-        threading.Thread(target=loop, daemon=True).start()
+        def run():
+            try:
+                loop()
+            finally:
+                target.put(None)    # 다음 단계(믹서 또는 VAD)를 깨운다
+
+        threading.Thread(target=run, daemon=True).start()
         return True
 
     def _pipe_reader(self, proc, target):

@@ -14,6 +14,27 @@ import types
 import config
 import groq_client
 import main
+import stt_engine
+
+
+def test_resample():
+    """윈도우 루프백이 주는 48kHz를 16kHz 블록으로 줄이는가.
+
+    공유 모드 루프백은 장치의 믹스 포맷을 그대로 내준다. 길이를 안 맞추면
+    VAD의 블록 길이 가정이 깨지고 발화 구간이 엉뚱하게 잘린다.
+    """
+    import numpy as np
+    # 48kHz에서 30ms = 1440 샘플 → 16kHz 한 블록 480 샘플
+    src = np.sin(np.linspace(0, 8 * np.pi, 1440)).astype(np.float32)
+    out = stt_engine._resample(src, 480)
+    assert len(out) == 480 and out.dtype == np.float32
+    assert abs(float(out.max()) - 1.0) < 0.05, out.max()
+
+    same = np.zeros(480, dtype=np.float32)
+    assert stt_engine._resample(same, 480) is same, "길이가 같으면 그대로 둔다"
+
+    # 44.1kHz도 같은 길이로 나와야 한다
+    assert len(stt_engine._resample(np.zeros(1323, dtype=np.float32), 480)) == 480
 
 
 def test_autosave():
