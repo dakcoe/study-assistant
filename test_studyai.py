@@ -640,18 +640,22 @@ def test_translation_batching():
     assert w.translated == [], "끄면서 번역을 보내면 안 된다"
 
 
-def test_notes_close_restores_chat():
-    """Notes를 닫으면 채팅 창이 반드시 돌아오는가.
+def test_window_roles():
+    """창을 닫았을 때 화면에 아무것도 안 남는 조합이 없는가.
 
-    둘 다 내려가 있으면 화면에 아무 창도 없다. 실제로 그렇게 만들기 쉬운
-    조합이라(채팅 숨김 + Notes 닫기) 여기서 못 박아 둔다.
+    Notes가 본체다. Notes의 X는 앱을 끝내고, 채팅 창의 X는 창만 내린다.
+    예전에는 Notes를 닫으면 숨어 있던 채팅이 돌아왔는데, 이제 Notes가 본체라
+    그 자리는 hide()로 따로 뺐다 — 채팅에서 Notes를 잠깐 치울 때 쓴다.
     """
-    calls = []
+    calls, quit_called = [], []
 
     class FakeMain:
         def set_chat_hidden(self, hidden):
             calls.append(hidden)
             config._settings["chat_hidden"] = hidden
+
+        def quit_app(self):
+            quit_called.append(True)
 
     class FakeStt:
         running = False
@@ -659,25 +663,44 @@ def test_notes_close_restores_chat():
         def stop(self):
             pass
 
-    w = types.SimpleNamespace(
-        _stt=FakeStt(), master=FakeMain(),
-        _trans_buf=[], _trans_queue=[], _trans_running=False, _flush_job=None,
-        update_state=lambda s: None, withdraw=lambda: None,
-        sync_chat_btn=lambda: None,
-        _flush_translation=lambda: None,
-    )
+    def fresh():
+        return types.SimpleNamespace(
+            _stt=FakeStt(), master=FakeMain(),
+            _trans_buf=[], _trans_queue=[], _trans_running=False, _flush_job=None,
+            update_state=lambda s: None, withdraw=lambda: None,
+            sync_chat_btn=lambda: None, _flush_translation=lambda: None,
+        )
 
     saved, real_save = dict(config._settings), config.save
     config.save = lambda: None          # 검사가 settings.json을 건드리지 않게
     try:
-        config._settings["chat_hidden"] = True
-        config._settings["notes_open"] = True
-        types.MethodType(main.NotesWindow._on_close, w)()
+        # hide() — 앱은 살아 있어야 하므로 채팅이 반드시 돌아온다
+        config._settings.update(chat_hidden=True, notes_open=True)
+        w = fresh()
+        types.MethodType(main.NotesWindow.hide, w)()
         assert calls == [False], calls
         assert config.get("chat_hidden") is False
         assert config.get("notes_open") is False
+
+        # X — 앱을 끝낸다. 다음에 켜면 다시 Notes부터 뜨도록 켜둔 채 남긴다.
+        calls.clear()
+        config._settings.update(chat_hidden=True, notes_open=False)
+        w = fresh()
+        types.MethodType(main.NotesWindow._on_close, w)()
+        assert quit_called == [True], "Notes의 X가 앱을 끝내지 않았다"
+        # _on_close를 부르면 채팅만 내려가고 창이 안 닫힌다 — 그 자리로 새지 않게
+        src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "main.py"), encoding="utf-8").read()
+        assert "self.master.quit_app()" in src
+        assert "self.master._on_close()" not in src
+        assert config.get("notes_open") is True
+        assert calls == [], "종료하면서 채팅 창을 되살릴 이유가 없다"
     finally:
         config._settings, config.save = saved, real_save
+
+    # 기본값도 Notes부터 뜨는 쪽이어야 한다
+    assert config.DEFAULTS["notes_open"] is True
+    assert config.DEFAULTS["chat_hidden"] is True
 
 
 def test_help_text():
@@ -691,7 +714,7 @@ def test_help_text():
     for name, body in main.HELP_SECTIONS:
         assert name and body.strip(), name
     for must in ("Always on Top", "Auto Send", "자동 번역", "자동 저장",
-                 "30일", "채팅 숨기기", "+"):
+                 "30일", "채팅 보이기", "+"):
         assert must in main.HELP_TEXT, must
     # 화면 라벨과 도움말이 따로 놀지 않게
     assert "다른 언어" in main.HELP_TEXT

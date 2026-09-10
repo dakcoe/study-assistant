@@ -51,8 +51,9 @@ DEFAULTS = {
     "translate_auto": True,     # 받아적은 줄을 자동으로 번역할지
     # 받아적기를 주로 쓰는 사람은 채팅 창이 계속 뒤에 깔려 방해가 된다.
     # 마지막에 어떤 상태였는지 기억했다가 다음 실행 때 그대로 띄운다.
-    "notes_open":     False,    # Notes 창이 열린 채로 끝냈는지
-    "chat_hidden":    False,    # 채팅 창을 내려둔 채로 끝냈는지
+    # Notes가 본체다. 처음 켜면 받아적기 창부터 뜨고 채팅은 내려가 있는다.
+    "notes_open":     True,     # Notes 창이 열린 채로 끝냈는지
+    "chat_hidden":    True,     # 채팅 창을 내려둔 채로 끝냈는지
     "notes_last_dir": "",       # 메모를 마지막으로 저장한 폴더
 }
 

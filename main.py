@@ -973,9 +973,9 @@ class GearButton(ctk.CTkCanvas):
 HELP_SECTIONS = [
     ("시작하기", """학습을 돕는 AI 설명·메모 앱입니다. 주요 기능은 두 가지입니다.
 
-**1. 메모** — 강의나 회의를 마이크로 받아 적습니다. 유튜브·줌처럼 컴퓨터 안에서 나는 소리도 텍스트로 기록해 저장합니다.
+**1. 노트** — 강의나 회의를 마이크로 받아 적습니다. 유튜브·줌처럼 컴퓨터 안에서 나는 소리도 텍스트로 기록해 저장합니다. 앱을 켜면 이 창이 먼저 뜹니다.
 
-**2. LLM** — 연결되어 있는 LLM에게 텍스트 복사만으로 빠르게 질문하여, 공부에 도움이 되는 설명을 받습니다.
+**2. LLM** — 연결되어 있는 LLM에게 텍스트 복사만으로 빠르게 질문하여, 공부에 도움이 되는 설명을 받습니다. 노트 아래 **채팅 보이기** 로 엽니다.
 
 ## 사용 방법
 
@@ -997,7 +997,9 @@ https://console.groq.com/keys
 ```
 """),
 
-    ("노트", """Notes 버튼을 누르면 음성을 텍스트로 받아 적기 위한 노트 페이지가 열립니다.
+    ("노트", """앱을 켜면 바로 뜨는 본체 창입니다. 음성을 텍스트로 받아 적습니다.
+
+창 위쪽에 **Always on Top** 스위치와 **?** · **⚙** 버튼이 있습니다.
 
 ## 소리 입력
 
@@ -1024,10 +1026,10 @@ https://console.groq.com/keys
 
 ## 그 밖의 버튼
 
-- **채팅 숨기기** — AI 채팅 창을 내려둡니다. Notes를 닫으면 자동으로 돌아옵니다
+- **채팅 보이기 / 숨기기** — AI 채팅 창을 올리거나 내립니다
 - **Save note** — 누를 때마다 Finder 창에서 폴더와 파일명을 지정해 저장합니다
 - **Clear** — 화면의 받아적기와 번역을 지웁니다. 누르면 한 번 확인을 묻습니다
-- **창 버튼** — 노란 최소화는 녹음을 유지하고, 빨간 닫기는 녹음을 중단합니다
+- **창 버튼** — 노란 최소화는 녹음을 유지합니다. 빨간 닫기는 이 창이 본체이므로 **앱이 종료**되며, 녹음 중이면 한 번 확인을 묻습니다
 """),
 
     ("비용", """**요금은 전혀 발생하지 않습니다.** 카드도 등록하지 않고, 한도를 넘어도 청구되지 않습니다. 그때는 요청이 잠시 거부될 뿐입니다.
@@ -1067,9 +1069,11 @@ Groq은 이 출입증에 무료 사용량을 걸어 둡니다. 그래서 키를 
 - 남은 양은 ⚙ 설정의 **한도** 탭에서 확인합니다
 """),
 
-    ("추가 기능", """**Always on Top** — on일 경우, 항상 다른 창 위에 표시(가려지지 않음). 투명도는 설정에서 조절 가능
+    ("추가 기능", """**Always on Top** — on일 경우, 항상 다른 창 위에 표시(가려지지 않음). 투명도는 설정에서 조절 가능. 두 창 어느 쪽에서 켜도 같이 적용됨
 
-**Auto Send** — on일 경우, 복사 즉시 AI에게 전송. 터미널·편집기에서 복사한 것은 제외
+**채팅 창** — 노트의 **채팅 보이기** 로 연다. 이 창의 빨간 닫기는 앱을 끄지 않고 창만 내린다
+
+**Auto Send** — 채팅 창 위쪽 스위치. on일 경우, 복사 즉시 AI에게 전송. 터미널·편집기에서 복사한 것은 제외
 
 **자동 저장** — 받아 적은 줄을 아래 폴더에 즉시 기록. 앱이 꺼져도 복구 가능. 30일 지난 파일은 앱 실행 시 삭제
 
@@ -1577,31 +1581,73 @@ class NotesWindow(ctk.CTkToplevel):
         # (창을 치워두고 강의를 계속 받아 적는 용도).
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
-        self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure((0, 1), weight=1)
+
+        # 상단 — 이 창이 앱의 본체다. 설정과 도움말이 여기 있다.
+        self.top_frame = ctk.CTkFrame(self, height=44, corner_radius=R_PANEL,
+                                      fg_color=t["panel_bg"], bg_color=t["app_bg"])
+        self.top_frame.grid(row=0, column=0, columnspan=2, sticky="ew",
+                            padx=SP_ITEM, pady=(SP_ITEM, SP_SNUG))
+
+        ctk.CTkLabel(self.top_frame, text="Voice Notes",
+                     font=(FONT_UI, FS_BODY, "bold"),
+                     text_color=t["text_primary"]).pack(side="left",
+                                                        padx=SP_ITEM, pady=SP_SNUG)
+
+        # 채팅 창이 내려가 있으면 그쪽 스위치에 손댈 수 없다. 같은 변수를 물려
+        # 여기서도 켜고 끈다 — 두 창이 늘 같은 상태를 보인다.
+        self.aot_switch = ctk.CTkSwitch(
+            self.top_frame, text="Always on Top", variable=parent._aot_var,
+            command=parent._toggle_aot, text_color=t["text_primary"],
+            progress_color=t["accent"], font=(FONT_UI, FS_BODY))
+        self.aot_switch.pack(side="left", padx=SP_ITEM, pady=SP_SNUG)
+
+        if ICON_FONT_OK:
+            self.settings_btn = ctk.CTkButton(
+                self.top_frame, text=ICON_GEAR, font=(ICON_FONT, 18),
+                width=40, height=28, command=self._open_settings,
+                fg_color=t["btn_sec_bg"], hover_color=t["btn_sec_hover"],
+                text_color=t["btn_sec_text"])
+        else:
+            self.settings_btn = GearButton(
+                self.top_frame, width=40, height=28, command=self._open_settings,
+                bg=t["btn_sec_bg"], hover=t["btn_sec_hover"],
+                fg=t["btn_sec_text"], panel=t["panel_bg"])
+        self.settings_btn.pack(side="right", padx=(0, SP_ITEM), pady=SP_SNUG)
+
+        # side="right"는 먼저 pack한 것이 더 오른쪽에 온다 — ?는 톱니 왼쪽
+        self.help_btn = ctk.CTkButton(
+            self.top_frame, text="?", width=32, height=28,
+            fg_color=t["btn_sec_bg"], text_color=t["btn_sec_text"],
+            hover_color=t["btn_sec_hover"],
+            font=(FONT_UI, FS_TITLE, "bold"), command=self._open_help)
+        self.help_btn.pack(side="right", padx=(0, SP_TIGHT), pady=SP_SNUG)
 
         # 왼쪽: 원문
         self.left_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.left_frame.grid(row=0, column=0, sticky="nsew", padx=(SP_ITEM, SP_TIGHT), pady=SP_ITEM)
+        self.left_frame.grid(row=1, column=0, sticky="nsew", padx=(SP_ITEM, SP_TIGHT), pady=(0, SP_ITEM))
 
+        # 라벨과 스위치는 글상자 아래에 둔다. 위에 두면 상단 바와 겹쳐 보이고,
+        # 받아적힌 글이 창 맨 위에서 시작하지 못한다.
         self._orig_header = ctk.CTkLabel(self.left_frame, text="원문",
             font=(FONT_UI, FS_CAPTION, "bold"), text_color=t["text_muted"])
-        self._orig_header.pack(anchor="w", padx=SP_TIGHT)
+        self._orig_header.pack(side="bottom", anchor="w", padx=SP_TIGHT)
 
         self.original_text = ctk.CTkTextbox(self.left_frame, corner_radius=R_PANEL,
             fg_color=t["panel_bg"], text_color=t["text_primary"],
             font=(FONT_UI, FS_BODY), wrap="word", undo=True)
-        self.original_text.pack(fill="both", expand=True, pady=SP_TIGHT)
+        self.original_text.pack(fill="both", expand=True, pady=(0, SP_TIGHT))
         _enable_drag_scroll(self.original_text)
 
         # 오른쪽: 번역
         self.right_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.right_frame.grid(row=0, column=1, sticky="nsew", padx=(SP_TIGHT, SP_ITEM), pady=SP_ITEM)
+        self.right_frame.grid(row=1, column=1, sticky="nsew", padx=(SP_TIGHT, SP_ITEM), pady=(0, SP_ITEM))
 
-        # 번역을 켜고 끄는 자리는 번역칸 바로 위가 맞다 — 아래 소리 입력 줄은
-        # 이미 빽빽하고, 무엇을 켜고 끄는지도 여기가 분명하다.
+        # 원문 쪽 라벨과 같은 줄에 서도록 번역칸 아래에 둔다. 무엇을 켜고 끄는
+        # 스위치인지는 번역칸에 붙어 있는 것으로 충분히 드러난다.
         head = ctk.CTkFrame(self.right_frame, fg_color="transparent")
-        head.pack(fill="x", padx=SP_TIGHT)
+        head.pack(side="bottom", fill="x", padx=SP_TIGHT)
 
         self._trans_header = ctk.CTkLabel(head, text="번역",
             font=(FONT_UI, FS_CAPTION, "bold"), text_color=t["text_muted"])
@@ -1620,7 +1666,7 @@ class NotesWindow(ctk.CTkToplevel):
         self.translated_text = ctk.CTkTextbox(self.right_frame, corner_radius=R_PANEL,
             fg_color=t["panel_bg"], text_color=t["trans_text"],
             font=(FONT_UI, FS_BODY), wrap="word", undo=True)
-        self.translated_text.pack(fill="both", expand=True, pady=SP_TIGHT)
+        self.translated_text.pack(fill="both", expand=True, pady=(0, SP_TIGHT))
         _enable_drag_scroll(self.translated_text)
         self._config_trans_tags(self.translated_text._textbox, t)
 
@@ -1632,7 +1678,7 @@ class NotesWindow(ctk.CTkToplevel):
 
         # 소리 입력 + 인식 언어
         self.lang_frame = ctk.CTkFrame(self, height=40, fg_color="transparent")
-        self.lang_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=SP_ITEM, pady=(0, SP_TIGHT))
+        self.lang_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=SP_ITEM, pady=(0, SP_TIGHT))
 
         self._src_label = ctk.CTkLabel(self.lang_frame, text="소리 입력",
             font=(FONT_UI, FS_CAPTION), text_color=t["text_muted"])
@@ -1691,7 +1737,7 @@ class NotesWindow(ctk.CTkToplevel):
 
         # 하단
         self.bottom_frame = ctk.CTkFrame(self, height=50, fg_color="transparent")
-        self.bottom_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=SP_ITEM, pady=(0, SP_ITEM))
+        self.bottom_frame.grid(row=3, column=0, columnspan=2, sticky="ew", padx=SP_ITEM, pady=(0, SP_ITEM))
 
         self.mic_btn = MicButton(self.bottom_frame, bg_color=t["app_bg"],
                                  fill=t["accent"], command=self._toggle)
@@ -2096,6 +2142,12 @@ class NotesWindow(ctk.CTkToplevel):
         self.master.set_input_device(value)
         self._sync_mic_mix()
 
+    def _open_settings(self):
+        self.master._open_settings()
+
+    def _open_help(self):
+        self.master._open_help()
+
     def _toggle_chat(self):
         self.master.set_chat_hidden(not config.get("chat_hidden"))
         self.sync_chat_btn()
@@ -2152,12 +2204,28 @@ class NotesWindow(ctk.CTkToplevel):
             self.lang_extra.set("+")
 
     def _on_close(self):
-        """빨간 X — 안 보이는 채로 계속 녹음해 API 한도를 축내지 않도록 멈춘다."""
+        """빨간 X — 이 창이 본체이므로 앱을 끝낸다.
+
+        녹음 중이면 한 번 묻는다. 자동 저장이 있어 받아적은 내용은 남지만,
+        모르고 닫으면 강의가 그 자리에서 끊긴다.
+        """
         if self._stt.running:
+            if not messagebox.askyesno(
+                    "받아적는 중", "받아적기를 멈추고 종료할까요?",
+                    detail="받아적은 내용은 자동 저장되어 있습니다.",
+                    icon="warning", default="no", parent=self):
+                return
             self._stt.stop()
         self._flush_translation()       # 모아둔 줄을 남기지 않는다
+        config.set("notes_open", True)  # 다음에 켜면 다시 이 창부터
+        self.master.quit_app()
+
+    def hide(self):
+        """앱은 살려두고 이 창만 내린다. 채팅 창에서 다시 열 수 있다."""
+        if self._stt.running:
+            self._stt.stop()
+        self._flush_translation()
         self.update_state(self._stt.state)
-        # 이 창을 닫는데 채팅 창도 내려가 있으면 앱이 통째로 사라진다
         self.master.set_chat_hidden(False)
         self.sync_chat_btn()
         config.set("notes_open", False)
@@ -2414,6 +2482,23 @@ class StudyAssistant(ctk.CTk):
         _config_link_tag(ctb, t)
 
     def _on_close(self):
+        """채팅 창의 빨간 X.
+
+        본체는 Notes다. 노트가 떠 있으면 이 창만 내리고, 노트가 없으면
+        더 볼 창이 없으니 앱을 끝낸다.
+        """
+        if self._notepad is not None and self._notepad.winfo_viewable():
+            self.set_chat_hidden(True)
+            self._notepad.sync_chat_btn()
+            return
+        self.quit_app()
+
+    def quit_app(self):
+        """앱을 끝낸다. Notes의 X가 부르는 자리이기도 하다.
+
+        _on_close를 그대로 부르면 안 된다 — 그쪽은 노트가 떠 있으면 채팅만
+        내리고 돌아오므로, Notes에서 부르면 아무것도 안 닫힌다.
+        """
         if self._stt:
             self._stt.shutdown()
         self.destroy()
@@ -2831,7 +2916,7 @@ class StudyAssistant(ctk.CTk):
         self.after(80, self._poll_q)
 
     def _restore_last_layout(self):
-        """지난번에 Notes를 쓰고 있었으면 그대로 다시 띄운다.
+        """Notes를 띄운다. 이 창이 본체이므로 기본은 여는 쪽이다.
 
         채팅 창을 내리는 건 Notes가 실제로 뜬 뒤에만 한다. 순서가 바뀌면
         아무 창도 없이 시작할 수 있다.
