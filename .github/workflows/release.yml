@@ -26,7 +26,9 @@ jobs:
           - runner: macos-14
             arch: arm64
             label: Apple Silicon
-          - runner: macos-13
+          # macos-13은 애플이 인텔을 접으면서 러너가 줄어 몇십 분씩 대기만 한다.
+          # macos-15-intel이 지금 쓰는 인텔 러너다.
+          - runner: macos-15-intel
             arch: x86_64
             label: Intel
     runs-on: ${{ matrix.runner }}
