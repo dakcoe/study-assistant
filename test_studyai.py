@@ -17,6 +17,26 @@ import main
 import stt_engine
 
 
+def test_loopback_thread_setup():
+    """윈도우 루프백을 도는 스레드가 COM을 켜고 장치도 거기서 잡는가.
+
+    COM은 스레드마다 따로 켜야 한다. 안 켜면 recorder를 열 때
+    0x800401F0(CO_E_NOTINITIALIZED)로 죽는다. 실제로 그렇게 실패했다.
+    COM 객체는 만든 스레드에 매여 있으므로 장치를 UI 스레드에서 잡아
+    넘겨도 안 된다. 윈도우가 없어 실행으로는 확인할 수 없어 소스로 본다.
+    """
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "stt_engine.py"), encoding="utf-8").read()
+    body = src[src.index("def _start_loopback"):src.index("def _pipe_reader")]
+    thread_part = body[body.index("def run():"):]
+    assert "CoInitializeEx" in thread_part, "스레드에서 COM을 안 켠다"
+    assert "CoUninitialize" in thread_part, "짝을 안 맞춘다"
+
+    loop_part = body[body.index("def loop():"):body.index("def run():")]
+    assert "default_speaker()" in loop_part, "장치를 스레드 밖에서 잡는다"
+    assert "include_loopback=True" in loop_part
+
+
 def test_resample():
     """윈도우 루프백이 주는 48kHz를 16kHz 블록으로 줄이는가.
 

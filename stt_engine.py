@@ -328,19 +328,19 @@ class STTEngine:
             self._on_error("soundcard 모듈이 없어 시스템 소리를 잡을 수 없습니다")
             self._set_state(STTState.IDLE)
             return False
-        try:
-            speaker = soundcard.default_speaker()
-            mic = soundcard.get_microphone(str(speaker.name), include_loopback=True)
-        except Exception as e:
-            self._running = False
-            self._on_error(f"시스템 소리 장치를 열 수 없습니다: {e}")
-            self._set_state(STTState.IDLE)
-            return False
 
         def loop():
             # 공유 모드 루프백은 장치의 믹스 포맷(보통 48kHz 스테레오)을 내준다.
             # 16kHz 모노를 달라고 하면 장치에 따라 거부당하므로, 주는 대로 받아
             # 우리가 모노로 합치고 16kHz로 줄인다. 앞의 조합부터 차례로 시도한다.
+            # 장치도 이 스레드에서 잡는다. COM 객체는 만든 스레드에 매여 있다.
+            try:
+                speaker = soundcard.default_speaker()
+                mic = soundcard.get_microphone(str(speaker.name), include_loopback=True)
+            except Exception as e:
+                self._on_error(f"시스템 소리 장치를 열 수 없습니다: {e}")
+                return
+
             started = False
             last = None
             for rate, channels in ((SAMPLE_RATE, 1), (48000, None), (44100, None)):
@@ -367,10 +367,18 @@ class STTEngine:
             self._on_error(f"시스템 소리를 열 수 없습니다: {last}")
 
         def run():
+            # soundcard는 COM으로 장치를 잡는데, COM은 스레드마다 따로 켜야 한다.
+            # 안 켜면 recorder를 열 때 0x800401F0(CO_E_NOTINITIALIZED)로 죽는다.
+            # 0 = COINIT_MULTITHREADED. 이미 켜져 있으면 S_FALSE가 오는데 그때도
+            # 짝을 맞춰 CoUninitialize를 불러야 한다.
+            import ctypes
+            hr = ctypes.windll.ole32.CoInitializeEx(None, 0)
             try:
                 loop()
             finally:
                 target.put(None)    # 다음 단계(믹서 또는 VAD)를 깨운다
+                if hr in (0, 1):    # S_OK / S_FALSE
+                    ctypes.windll.ole32.CoUninitialize()
 
         threading.Thread(target=run, daemon=True).start()
         return True
