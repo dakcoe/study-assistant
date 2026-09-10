@@ -1,9 +1,17 @@
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-lightgrey.svg)](https://github.com/dakcoe/study-assistant/releases/latest)
+[![Release](https://img.shields.io/github/v/release/dakcoe/study-assistant)](https://github.com/dakcoe/study-assistant/releases/latest)
+[![Build](https://github.com/dakcoe/study-assistant/actions/workflows/release.yml/badge.svg)](https://github.com/dakcoe/study-assistant/actions/workflows/release.yml)
+
 # Study AI
 
 강의를 **받아 적고**, **번역하고**, 모르는 걸 **AI에게 물어보는** 앱입니다.
 마이크 소리는 물론 유튜브·줌처럼 컴퓨터에서 나는 소리도 텍스트로 기록합니다.
 
 무료입니다. 카드 등록도 필요 없습니다.
+
+![Study AI](docs/screenshot.png)
 
 ## 받기
 
@@ -65,6 +73,13 @@ xattr -cr "/Applications/Study AI.app"
 ## 만든 사람에게
 
 문제가 생기면 [Issues](https://github.com/dakcoe/study-assistant/issues)에 남겨주세요.
+
+## 라이선스
+
+MIT — 마음대로 쓰고 고치고 배포해도 됩니다. [LICENSE](LICENSE)
+
+AI 응답은 [Groq](https://groq.com)의 무료 티어를 쓰며, 그쪽 약관을 따릅니다.
+아이콘은 [Google Material Icons](https://fonts.google.com/icons) (Apache 2.0).
 
 ---
 
