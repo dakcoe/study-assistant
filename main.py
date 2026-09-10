@@ -1,12 +1,10 @@
-"""Study AI (macOS) — 클립보드 캡처 + Groq LLM 채팅 + Groq Whisper 음성 메모.
+"""Study AI — 받아적기·번역 노트와 Groq LLM 채팅.
 
-디자인 시스템(3테마 팔레트, MicButton, 마크다운 렌더러, 레이아웃)은 Windows판을
-그대로 가져왔고, 플랫폼에 의존하는 부분만 macOS용으로 새로 썼다:
-  - 최전면 앱 감지: ctypes.windll → osascript
-  - 클립보드: pyperclip → pbpaste
-  - 폰트: Malgun Gothic / Courier New → Apple SD Gothic Neo / Menlo
-  - STT: RealtimeSTT(로컬 모델) → Groq Whisper API
-  - LLM: ollama → Groq
+창은 둘이다. NotesWindow가 본체(받아적기)이고 StudyAssistant가 채팅 창이다.
+Tk의 루트는 StudyAssistant라 앱 상태(큐, STT, 설정 창)를 그쪽이 들고 있다.
+
+플랫폼에 따라 갈리는 곳은 config.WINDOWS 로 나눈다 — 최전면 앱 감지, 클립보드,
+아이콘 폰트 등록, 단축키, 링크 열기.
 """
 
 import logging

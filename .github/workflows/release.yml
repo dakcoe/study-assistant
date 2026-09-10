@@ -26,11 +26,13 @@ jobs:
           - runner: macos-14
             arch: arm64
             label: Apple Silicon
+            slug: AppleSilicon
           # macos-13은 애플이 인텔을 접으면서 러너가 줄어 몇십 분씩 대기만 한다.
           # macos-15-intel이 지금 쓰는 인텔 러너다.
           - runner: macos-15-intel
             arch: x86_64
             label: Intel
+            slug: Intel
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -78,7 +80,7 @@ jobs:
           sed "s|{NEED}|$NEED|" "packaging/읽어주세요-mac.txt" > "$STAGE/읽어주세요.txt"
           ln -s /Applications "$STAGE/Applications"
           hdiutil create -volname "Study AI" -srcfolder "$STAGE" -ov -format UDZO \
-                         -imagekey zlib-level=9 "Study AI (${{ matrix.label }}).dmg"
+                         -imagekey zlib-level=9 "StudyAI-macOS-${{ matrix.slug }}.dmg"
 
       - uses: actions/upload-artifact@v4
         with:

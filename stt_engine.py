@@ -1,9 +1,8 @@
-"""macOS용 STT 엔진 — sounddevice로 마이크를 받고, 에너지 VAD로 발화 구간을
-끊어서 Groq Whisper에 보낸다.
+"""STT 엔진 — sounddevice로 마이크를 받고, 에너지 VAD로 발화 구간을 끊어서
+Groq Whisper에 보낸다.
 
-Windows판은 RealtimeSTT(faster-whisper)를 썼지만 여기서는 인식을 전부 API로
-넘기므로 torch / multiprocessing / 모델 로딩이 없다. 대신 발화 구간을 직접
-잘라야 해서 VAD가 이 파일의 핵심이다.
+인식을 전부 API로 넘기므로 로컬 모델이 없다. 대신 발화 구간을 직접 잘라야 해서
+VAD가 이 파일의 핵심이다.
 
 상태 전이:
   IDLE ─[음성 감지]→ SPEAKING ─[침묵]→ PROCESSING ─[인식 완료]→ IDLE
