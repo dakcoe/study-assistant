@@ -34,10 +34,10 @@ DEFAULTS = {
     # 있었는데(예: "출력한文字와") gpt-oss에서는 재현되지 않는다. 게다가 입력이 4배
     # 싸고(1M당 $0.15 vs $0.59) 무료 일일 토큰 한도가 두 배(200K vs 100K)다.
     # 채팅·번역 모델을 따로 고른다. 한도가 모델마다 따로라 나눠 쓰면 오래 간다.
-    # 기본값은 둘 다 qwen3.6 — 번역 한 줄에 15토큰으로 가장 싸고 용어도 정확하다
-    # ("경사 하강법"; qwen3.8은 "그라디언트 디센트"로 음차한다).
-    "chat_model":     "qwen/qwen3.6-27b",
-    "translate_model": "qwen/qwen3.6-27b",
+    # 기본값은 둘 다 qwen3.8 — 값이 싸고 번역이 짧게 나온다.
+    # (qwen3.6이 용어는 더 정확했지만 2026-09에 제공이 끊겼다)
+    "chat_model":     "qwen/qwen3.8-27b",
+    "translate_model": "qwen/qwen3.8-27b",
     "extra_lang":     "",       # + 에서 고른 인식 언어 (코드)
     "whisper_model": "whisper-large-v3",
     "language":      "ko",       # AI 응답 언어
@@ -57,11 +57,13 @@ DEFAULTS = {
     "notes_last_dir": "",       # 메모를 마지막으로 저장한 폴더
 }
 
-# 2026-08 기준 Groq 무료 목록. llama-3.x는 제공이 끊겨 빼고, 한도가 따로 잡히는
-# 모델만 남긴다 — 120b가 일일 토큰을 다 쓰면 20b, qwen 순으로 넘어간다.
-# (groq/compound-mini는 내부에서 120b로 라우팅되어 대체가 안 된다)
+# 2026-09 기준 Groq 무료 목록. 한도가 모델마다 따로 잡히므로 앞에서부터 쓰다가
+# 막히면 다음으로 넘어간다. (groq/compound-mini는 내부에서 120b로 라우팅되어
+# 대체가 안 된다)
+#
+# 제공이 끊긴 모델은 빼야 한다 — 카탈로그(/models)에는 한동안 남아 있어도
+# 호출하면 404가 온다. llama-3.x가 그랬고, qwen3.6도 2026-09에 그렇게 사라졌다.
 CHAT_MODELS = [
-    "qwen/qwen3.6-27b",
     "qwen/qwen3.8-27b",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
@@ -83,7 +85,6 @@ NO_THINK = {
     "openai/gpt-oss-120b": ({"reasoning_effort": "low"},  False),
     "openai/gpt-oss-20b":  ({"reasoning_effort": "low"},  False),
     "qwen/qwen3.8-27b":    ({"reasoning_effort": "none"}, False),
-    "qwen/qwen3.6-27b":    ({"reasoning_effort": "none"}, True),
 }
 
 # 번역을 줄마다 보내면 프롬프트(약 245토큰)가 매번 새로 붙는다. 입력 문장이
@@ -169,7 +170,22 @@ def load():
             _settings = {**DEFAULTS, **json.load(f)}
     except (FileNotFoundError, json.JSONDecodeError):
         _settings = dict(DEFAULTS)
+    _drop_gone_models()
     return _settings
+
+
+def _drop_gone_models():
+    """없어진 모델이 설정에 박혀 있으면 기본값으로 되돌린다.
+
+    Groq이 모델 제공을 끊으면 그 이름으로 부를 때마다 404다. 한 번 고른 모델은
+    settings.json에 남으므로, 그냥 두면 앱을 새로 받아도 계속 404를 부른다
+    (qwen3.6이 2026-09에 그렇게 사라졌다). 여기서 걸러 기본값으로 돌린다.
+    """
+    for key, pool in (("chat_model", CHAT_MODELS),
+                      ("translate_model", CHAT_MODELS),
+                      ("whisper_model", WHISPER_MODELS)):
+        if _settings.get(key) not in pool:
+            _settings[key] = DEFAULTS[key]
 
 
 def save():

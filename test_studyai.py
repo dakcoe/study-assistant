@@ -185,7 +185,7 @@ def test_unavailable_falls_back():
     """모델이 503(용량 초과)을 내면 다음 모델로 넘어가는가.
 
     한도(429)만 넘기고 5xx는 그대로 실패시키면, 번역 자리에 오류 문구가 남는다
-    (qwen3.6이 "over capacity" 503을 낸 적이 있다).
+    (qwen이 "over capacity" 503을 낸 적이 있다).
     """
     import time
     tried, real = [], groq_client._stream_one
@@ -275,14 +275,14 @@ def test_translate_prompt():
 def test_link_detection():
     """도움말의 주소·경로만 눌리는 대상으로 잡히는가.
 
-    모델 이름(qwen/qwen3.6-27b)이나 소수점 숫자까지 링크로 잡히면 본문이
+    모델 이름(qwen/qwen3.8-27b)이나 소수점 숫자까지 링크로 잡히면 본문이
     파랗게 물든다. 잡히면 안 되는 쪽을 같이 확인한다.
     """
     find = main._LINK_RE.findall
     assert find("console.groq.com/keys 에서 가입") == ["console.groq.com/keys"]
     assert find("https://console.groq.com/keys 로") == ["https://console.groq.com/keys"]
     assert find("~/Documents/6학기 에 넣었다")[0].startswith("~/Documents")
-    for plain in ("qwen/qwen3.6-27b 모델", "3.6 같은 것", "notes/autosave/ 에도",
+    for plain in ("qwen/qwen3.8-27b 모델", "3.8 같은 것", "notes/autosave/ 에도",
                   "보통 문장은 안 잡힌다"):
         assert find(plain) == [], plain
 
@@ -323,7 +323,7 @@ def test_model_catalog():
     entries = [
         {"id": "openai/gpt-oss-120b", "output_modalities": ["text"],
          "supported_features": ["tools", "reasoning"], "context_window": 131072},
-        {"id": "qwen/qwen3.6-27b", "output_modalities": ["text"],
+        {"id": "qwen/qwen3.8-27b", "output_modalities": ["text"],
          "supported_features": ["tools", "reasoning"], "context_window": 131072},
         {"id": "whisper-large-v3", "output_modalities": ["transcription"],
          "context_window": 448},
@@ -339,7 +339,7 @@ def test_model_catalog():
     ]
     kinds = {e["id"]: groq_client._classify(e) for e in entries}
     assert kinds["openai/gpt-oss-120b"] == "chat"
-    assert kinds["qwen/qwen3.6-27b"] == "chat"
+    assert kinds["qwen/qwen3.8-27b"] == "chat"
     assert kinds["whisper-large-v3"] == "whisper"
     for junk in ("canopylabs/orpheus-v1-english", "meta-llama/llama-prompt-guard-2-22m",
                  "allam-2-7b", "openai/gpt-oss-safeguard-20b"):
@@ -381,10 +381,10 @@ def test_strip_think():
 
 def test_model_chain():
     """사라진 모델을 붙잡지 않는가."""
-    live = {"openai/gpt-oss-120b", "qwen/qwen3.6-27b"}
+    live = {"openai/gpt-oss-120b", "qwen/qwen3.8-27b"}
     real = config.CHAT_MODELS               # 다음 검사가 진짜 목록을 봐야 한다
     config.CHAT_MODELS = ["openai/gpt-oss-120b", "llama-3.3-70b-versatile",
-                          "qwen/qwen3.6-27b"]
+                          "qwen/qwen3.8-27b"]
     groq_client._cooldown.clear()
     try:
 
@@ -393,19 +393,40 @@ def test_model_chain():
 
         groq_client._available = live        # 확인 후 — 죽은 것 제거
         assert groq_client._model_chain("openai/gpt-oss-120b") == \
-            ["openai/gpt-oss-120b", "qwen/qwen3.6-27b"]
+            ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
 
         # 선호 모델이 사라져도 나머지로 이어간다
         assert groq_client._model_chain("llama-3.3-70b-versatile") == \
-            ["openai/gpt-oss-120b", "qwen/qwen3.6-27b"]
+            ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
 
         # 한도에 걸린 모델은 건너뛴다
         groq_client._mark_limited("openai/gpt-oss-120b", None)
-        assert groq_client._model_chain("openai/gpt-oss-120b") == ["qwen/qwen3.6-27b"]
+        assert groq_client._model_chain("openai/gpt-oss-120b") == ["qwen/qwen3.8-27b"]
     finally:
         config.CHAT_MODELS = real
         groq_client._available = None
         groq_client._cooldown.clear()
+
+
+def test_stale_model_dropped():
+    """설정에 박힌 없어진 모델을 걸러내는가.
+
+    Groq이 제공을 끊으면 그 이름은 404다. 한 번 고른 모델은 settings.json에
+    남으므로 그냥 두면 앱을 새로 받아도 계속 404를 부른다 — qwen3.6이 그랬다.
+    """
+    saved = dict(config._settings)
+    try:
+        config._settings.update(chat_model="qwen/qwen3.6-27b",
+                                translate_model="사라진모델",
+                                whisper_model="whisper-large-v3-turbo")
+        config._drop_gone_models()
+        assert config.get("chat_model") == config.DEFAULTS["chat_model"]
+        assert config.get("translate_model") == config.DEFAULTS["translate_model"]
+        # 멀쩡한 값은 건드리지 않는다
+        assert config.get("whisper_model") == "whisper-large-v3-turbo"
+    finally:
+        config._settings.clear()
+        config._settings.update(saved)
 
 
 def test_no_think_table():
@@ -418,8 +439,14 @@ def test_no_think_table():
             assert effort in ("none", "default"), (model, effort)
         assert model in config.CHAT_MODELS, f"{model}이 CHAT_MODELS에 없다"
 
-    # 켜두면 사고과정이 응답에 섞여 나오는 모델은 무조건 꺼져 있어야 한다
-    assert config.NO_THINK["qwen/qwen3.6-27b"][1] is True
+    # 둘째 값은 "사용자가 켜도 무조건 끈다"는 뜻이다. 사고과정을 본문에 흘리는
+    # 모델에 쓴다(qwen3.6이 그랬고 2026-09에 제공이 끊겼다). 지금은 해당 모델이
+    # 없지만, 플래그를 지우면 다음에 같은 모델이 와도 대응할 자리가 사라진다.
+    assert all(isinstance(always, bool) for _, always in config.NO_THINK.values())
+
+    # 없어진 모델이 표에 남아 있으면 고를 수 있는 것처럼 보인다
+    assert "qwen/qwen3.6-27b" not in config.NO_THINK
+    assert "qwen/qwen3.6-27b" not in config.CHAT_MODELS
 
 
 def test_icon_font():
@@ -565,15 +592,16 @@ def test_limit_rows():
         # 음성은 응답에 audio-seconds 헤더가 붙을 때도 안 붙을 때도 있다
         "whisper-large-v3": {"requests": (1691.0, 2000.0), "audio": (7199.0, 7200.0),
                              "at": 1788000000, "blocked": None},
-        "qwen/qwen3.8-27b": {"at": 1788000000, "blocked": "한도 초과"},
-        "qwen/qwen3.6-27b": {"at": 1788000000, "blocked": None},   # 아무 헤더도 없는 경우
+        "openai/gpt-oss-20b": {"at": 1788000000, "blocked": "한도 초과"},
+        "qwen/qwen3.8-27b": {"at": 1788000000, "blocked": None},   # 아무 헤더도 없는 경우
     })
     got = {name: (round(ratio, 3), text, blocked) for name, ratio, text, blocked in rows()}
     assert got["gpt-oss-120b"] == (0.25, "250/1000", False), got["gpt-oss-120b"]
     assert got["whisper-large-v3"] == (0.846, "1691/2000 · 7199초", False)
-    assert got["qwen3.8-27b"] == (0.0, "막힘", True)
-    assert got["qwen3.6-27b"] == (0.0, "-", False)      # 0으로 나누지 않는다
-    assert got["gpt-oss-20b"] == (1.0, "1000/1000", False)   # 기록 없는 모델은 기본값
+    assert got["gpt-oss-20b"] == (0.0, "막힘", True)
+    assert got["qwen3.8-27b"] == (0.0, "-", False)      # 0으로 나누지 않는다
+    # 기록이 아예 없는 모델은 가득 찬 것으로 본다 (이름은 20자로 잘려 표시된다)
+    assert got["whisper-large-v3-tur"] == (1.0, "2000/2000", False)
 
     assert len(rows()) == len(config.CHAT_MODELS) + len(config.WHISPER_MODELS)
     assert all(0.0 <= r <= 1.0 for _, r, _, _ in rows()), "게이지 비율이 범위를 벗어남"
@@ -821,7 +849,7 @@ def test_translate_budget():
 def test_est_tokens():
     """어림값이 실제 토크나이저와 크게 벌어지지 않는가.
 
-    아래 '실제'는 qwen3.6-27b에 같은 글을 넣어 prompt_tokens로 잰 값이다.
+    아래 '실제'는 qwen3.6-27b(제공 종료)에 같은 글을 넣어 prompt_tokens로 잰 값이다.
     20% 넘게 빗나가면 기준 토큰이 뜻하는 바가 달라진다.
     """
     assert main._est_tokens("") == 1                    # 0이면 영영 안 쌓인다
