@@ -78,8 +78,15 @@ jobs:
           cp -R "dist/Study AI.app" "$STAGE/"
           cp packaging/guide-mac.html "$STAGE/시작하기.html"
           ln -s /Applications "$STAGE/Applications"
-          hdiutil create -volname "Study AI" -srcfolder "$STAGE" -ov -format UDZO \
-                         -imagekey zlib-level=9 "StudyAI-macOS-${{ matrix.slug }}.dmg"
+          # "Resource busy"로 한 번씩 실패한다 — 임시 폴더를 다른 프로세스가
+          # 잡고 있는 동안이라, 잠깐 쉬었다 다시 하면 된다.
+          for try in 1 2 3; do
+            hdiutil create -volname "Study AI" -srcfolder "$STAGE" -ov -format UDZO \
+                           -imagekey zlib-level=9 "StudyAI-macOS-${{ matrix.slug }}.dmg" && break
+            echo "dmg 생성 실패 ($try/3) — 15초 뒤 다시"
+            sleep 15
+          done
+          test -f "StudyAI-macOS-${{ matrix.slug }}.dmg"
 
       - uses: actions/upload-artifact@v4
         with:
