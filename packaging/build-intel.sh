@@ -10,7 +10,7 @@
 # x86_64용과 arm64용을 따로 내므로, 인텔용은 x86_64 파이썬으로 따로 빌드한다.
 
 set -e
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."     # 저장소 루트에서 돈다
 
 VENV=".venv-x86"
 
@@ -23,19 +23,19 @@ fi
 
 # ── 2. Swift 헬퍼 x86_64 ────────────────────────────────────────────────────
 # ScreenCaptureKit 오디오 탭은 macOS 13부터라 타깃을 13으로 잡는다.
-if [ ! -f audio_capture_x86 ] || [ audio_capture.swift -nt audio_capture_x86 ]; then
+if [ ! -f app/audio_capture_x86 ] || [ app/audio_capture.swift -nt app/audio_capture_x86 ]; then
     echo "▶ Swift 헬퍼 (x86_64)"
-    swiftc -O -target x86_64-apple-macos13 audio_capture.swift -o audio_capture_x86
+    swiftc -O -target x86_64-apple-macos13 app/audio_capture.swift -o app/audio_capture_x86
 fi
 
 # ── 3. 빌드 ────────────────────────────────────────────────────────────────
 # spec은 audio_capture 라는 이름만 보므로, 빌드하는 동안만 x86 것으로 바꿔 둔다.
 echo "▶ PyInstaller (x86_64)"
-cp audio_capture audio_capture.arm64.bak
-cp audio_capture_x86 audio_capture
-trap 'cp audio_capture.arm64.bak audio_capture; rm -f audio_capture.arm64.bak' EXIT
+cp app/audio_capture app/audio_capture.arm64.bak
+cp app/audio_capture_x86 app/audio_capture
+trap 'cp app/audio_capture.arm64.bak app/audio_capture; rm -f app/audio_capture.arm64.bak' EXIT
 "$VENV/bin/python" -m PyInstaller --noconfirm --clean \
-    --distpath dist-x86 --workpath build-x86 StudyAI.spec >/dev/null 2>&1
+    --distpath dist-x86 --workpath build-x86 packaging/StudyAI.spec >/dev/null 2>&1
 
 APP="dist-x86/Study AI.app"
 
@@ -59,4 +59,4 @@ done < <(find "$APP" \( -name "*.so" -o -name "*.dylib" -o -perm -u+x -type f \)
 echo "  전부 x86_64 포함"
 
 # ── 6. dmg (안내문까지 make_dmg.sh가 넣는다) ────────────────────────────────
-./make_dmg.sh --intel
+packaging/make_dmg.sh --intel

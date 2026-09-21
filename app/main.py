@@ -832,8 +832,13 @@ ICON_FONT = "Material Icons"          # 번들에 넣은 TTF의 패밀리 이름
 ICON_GEAR = "\ue8b8"                  # settings 글리프
 
 def _asset(name):
-    """번들 안 파일의 경로. PyInstaller로 묶으면 임시 폴더로 풀린다."""
-    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    """번들 안 파일의 경로.
+
+    묶으면 PyInstaller가 임시 폴더에 풀어 놓고(_MEIPASS), 소스로 돌 때는
+    저장소 루트에 있다 — 이 파일은 app/ 안이라 한 칸 올라가야 한다.
+    """
+    base = getattr(sys, "_MEIPASS",
+                   os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     return os.path.join(base, name)
 
 

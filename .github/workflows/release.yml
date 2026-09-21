@@ -47,14 +47,14 @@ jobs:
           pip install -r requirements.txt pyinstaller
 
       - name: 테스트
-        run: python test_studyai.py
+        run: python tests/test_studyai.py
 
       # ScreenCaptureKit 오디오 탭은 macOS 13부터라 타깃을 13으로 잡는다.
       - name: Swift 헬퍼 컴파일
-        run: swiftc -O -target ${{ matrix.arch }}-apple-macos13 audio_capture.swift -o audio_capture
+        run: swiftc -O -target ${{ matrix.arch }}-apple-macos13 app/audio_capture.swift -o app/audio_capture
 
       - name: 빌드
-        run: python -m PyInstaller --noconfirm --clean StudyAI.spec
+        run: python -m PyInstaller --noconfirm --clean packaging/StudyAI.spec
 
       # 한국어 번들로 인식시켜야 저장 패널이 한국어로 뜬다.
       - name: 한국어 번들 + 서명
@@ -76,8 +76,7 @@ jobs:
         run: |
           STAGE=$(mktemp -d)
           cp -R "dist/Study AI.app" "$STAGE/"
-          NEED="- ${{ matrix.label }} 맥 전용입니다. 다른 맥에서는 다른 파일을 쓰세요."
-          sed "s|{NEED}|$NEED|" "packaging/읽어주세요-mac.txt" > "$STAGE/읽어주세요.txt"
+          cp packaging/guide-mac.html "$STAGE/시작하기.html"
           ln -s /Applications "$STAGE/Applications"
           hdiutil create -volname "Study AI" -srcfolder "$STAGE" -ov -format UDZO \
                          -imagekey zlib-level=9 "StudyAI-macOS-${{ matrix.slug }}.dmg"
@@ -111,14 +110,14 @@ jobs:
           pip install -r requirements.txt pyinstaller
 
       - name: 테스트
-        run: python test_studyai.py
+        run: python tests/test_studyai.py
 
       - name: 빌드
-        run: python -m PyInstaller --noconfirm --clean StudyAI-win.spec
+        run: python -m PyInstaller --noconfirm --clean packaging/StudyAI-win.spec
 
       - name: 안내문 넣기
         shell: pwsh
-        run: Copy-Item "packaging/읽어주세요-windows.txt" "dist/StudyAI/읽어주세요.txt"
+        run: Copy-Item "packaging/guide-windows.html" "dist/StudyAI/시작하기.html"
 
       - uses: actions/upload-artifact@v4
         with:

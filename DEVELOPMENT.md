@@ -3,7 +3,8 @@
 ## 실행
 
 ```bash
-.venv/bin/python main.py
+.venv/bin/python app/main.py        # 소스로 실행
+.venv/bin/python tests/test_studyai.py
 ```
 
 터미널에서 띄우면 **마이크가 동작하지 않는다.** macOS는 권한 주체를 파이썬이 아니라
@@ -11,22 +12,22 @@
 뜨지 않고 PortAudio가 에러 없이 무음(전부 0)만 돌려준다. `.app`으로 묶어야 앱이
 자기 이름으로 권한을 받는다.
 
-```bash
-.venv/bin/python test_studyai.py     # 테스트
-```
-
 ## 빌드
 
 ```bash
-./build.sh                 # arm64 빌드 + 서명 + /Applications 설치
-./make_dmg.sh              # 설치된 앱으로 dmg (--build 로 빌드부터)
-./build-intel.sh           # 인텔용 빌드 → dmg 까지
+packaging/build.sh                 # arm64 빌드 + 서명 + /Applications 설치
+packaging/make_dmg.sh              # 설치된 앱으로 dmg (--build 로 빌드부터)
+packaging/build-intel.sh           # 인텔용 빌드 → dmg 까지
 ```
+
+어느 폴더에서 실행해도 된다 — 스크립트가 저장소 루트로 올라가 돌고, spec은
+자기 위치(SPECPATH) 기준으로 경로를 잡는다.
 
 Windows와 4종 배포본은 GitHub Actions에서 만든다 (`.github/workflows/release.yml`).
 `v1.0.0` 같은 태그를 밀면 Releases에 dmg 2개와 zip 2개가 붙는다.
 PyInstaller는 크로스 컴파일이 안 되므로 각 플랫폼 러너에서 빌드한다.
 맥 유니버설 앱은 numpy 2.x가 universal2 휠을 내지 않아 만들 수 없다.
+인텔 맥은 `macos-15-intel` 러너를 쓴다 (`macos-13`은 큐에서 잡히지 않는다).
 
 ## 플랫폼 분기
 
@@ -75,18 +76,20 @@ PyInstaller는 크로스 컴파일이 안 되므로 각 플랫폼 러너에서 �
 ## 파일 구조
 
 ```
-main.py            UI 전부 (StudyAssistant / NotesWindow / SettingsDialog / HelpDialog)
-stt_engine.py      소리 캡처 + VAD + Whisper 호출
-groq_client.py     Groq API — 채팅 스트리밍, 음성 인식, 모델 목록, 한도 계산
-config.py          settings.json 로드/저장, 상수
-test_studyai.py    테스트 (프레임워크 없이 실행)
-
+app/               앱 소스
+  main.py          UI 전부 (StudyAssistant / NotesWindow / SettingsDialog / HelpDialog)
+  stt_engine.py    소리 캡처 + VAD + Whisper 호출
+  groq_client.py   Groq API — 채팅 스트리밍, 음성 인식, 모델 목록, 한도 계산
+  config.py        settings.json 로드/저장, 상수
+  audio_capture.swift   ScreenCaptureKit 앱 소리 캡처 헬퍼 (맥 전용)
+tests/             프레임워크 없이 그냥 실행하는 테스트
+packaging/         빌드 스크립트 · PyInstaller spec · 설치 안내(HTML)
 assets/            번들에 통째로 들어간다 (아이콘, 폰트, 도움말 그림)
-packaging/         설치 안내문 — 로컬 스크립트와 CI가 같은 파일을 쓴다
 tools/             개발용 (창 스크린샷, 아이콘 생성기)
+docs/              README에 쓰는 그림
 ```
 
-소스로 실행하면 `settings.json`·`usage.json`·`notes/`가 프로젝트 폴더에 생긴다
+소스로 실행하면 `settings.json`·`usage.json`·`notes/`가 저장소 루트에 생긴다
 (`.app`은 `~/Library/Application Support/StudyAI/`). **그 `settings.json`에는 API 키가
 평문으로 들어가므로 폴더째 남에게 보내지 않는다.**
 

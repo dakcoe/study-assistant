@@ -1,6 +1,6 @@
 """자잘한 자체 점검 — 네트워크 없이 돈다.
 
-    .venv/bin/python test_studyai.py
+    .venv/bin/python tests/test_studyai.py
 
 여기 있는 둘은 조용히 망가지면 알아채기 어려운 것들이다.
 자동 저장은 안 되도 화면은 멀쩡해 보이고, 모델 체인은 Groq가 모델을
@@ -8,8 +8,13 @@
 """
 
 import os
+import sys
 import tempfile
 import types
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+APP_DIR = os.path.join(ROOT, "app")
+sys.path.insert(0, APP_DIR)
 
 import config
 import groq_client
@@ -25,8 +30,7 @@ def test_loopback_thread_setup():
     COM 객체는 만든 스레드에 매여 있으므로 장치를 UI 스레드에서 잡아
     넘겨도 안 된다. 윈도우가 없어 실행으로는 확인할 수 없어 소스로 본다.
     """
-    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "stt_engine.py"), encoding="utf-8").read()
+    src = open(os.path.join(APP_DIR, "stt_engine.py"), encoding="utf-8").read()
     body = src[src.index("def _start_loopback"):src.index("def _pipe_reader")]
     thread_part = body[body.index("def run():"):]
     assert "CoInitializeEx" in thread_part, "스레드에서 COM을 안 켠다"
@@ -171,13 +175,11 @@ def test_shortcut_keys():
         assert main._vkey(make(vkey)) == vkey
 
     # 창에 거는 바인딩도 같은 수식 키를 써야 한다
-    src_main = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                 "main.py"), encoding="utf-8").read()
+    src_main = open(os.path.join(APP_DIR, "main.py"), encoding="utf-8").read()
     assert src_main.count('f"<{MOD_KEY}-KeyPress>"') == 3, "본체·노트·도움말"
 
     # 편집 가능한 칸에만 되돌리기가 걸려야 한다
-    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "main.py"), encoding="utf-8").read()
+    src = open(os.path.join(APP_DIR, "main.py"), encoding="utf-8").read()
     assert src.count("undo=True") == 3, "원문·번역·입력칸 세 곳"
 
 
@@ -259,8 +261,7 @@ def test_translate_prompt():
     예전에는 지시문에 '영어→한국어' 견본 문답이 박혀 있어서, 응답 언어를
     일본어로 두면 그 견본이 지시를 이기고 한국어를 뱉었다(실측). 견본을 뺐다.
     """
-    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "main.py"), encoding="utf-8").read()
+    src = open(os.path.join(APP_DIR, "main.py"), encoding="utf-8").read()
     body = src[src.index("def _translate_thread"):]
     body = body[:body.index("buf = []")]
     assert "모델은 훈련 데이터로부터" not in body, "견본 문답이 다시 들어왔다"
@@ -457,7 +458,7 @@ def test_icon_font():
     그리는 GearButton으로 떨어져야 하고, 그래서 그 클래스는 지우면 안 된다.
     """
     here = os.path.dirname(os.path.abspath(__file__))
-    ttf = os.path.join(here, "assets", "MaterialIcons-Regular.ttf")
+    ttf = os.path.join(ROOT, "assets", "MaterialIcons-Regular.ttf")
     assert os.path.exists(ttf), "MaterialIcons-Regular.ttf 가 없다"
     assert os.path.getsize(ttf) > 100_000, os.path.getsize(ttf)
 
@@ -467,13 +468,13 @@ def test_icon_font():
     assert hasattr(main, "GearButton"), "등록 실패 시 쓸 대비책이 사라졌다"
 
     # 번들에도 들어가야 앱을 받은 사람 화면에서 보인다
-    spec = open(os.path.join(here, "StudyAI.spec"), encoding="utf-8").read()
+    spec = open(os.path.join(ROOT, "packaging", "StudyAI.spec"), encoding="utf-8").read()
     # assets 폴더째로 들어가고, 그 안에 폰트가 있다
-    assert '("assets", "assets")' in spec, "spec의 datas에 assets가 없다"
+    assert '"assets"), "assets"' in spec, "spec의 datas에 assets가 없다"
     icon = "AppIcon.ico" if config.WINDOWS else "AppIcon.icns"
     for name in ("help_key_button.png", "help_key_dialog.png",
                  "MaterialIcons-Regular.ttf", icon):
-        assert os.path.exists(os.path.join(here, "assets", name)), name
+        assert os.path.exists(os.path.join(ROOT, "assets", name)), name
 
 
 def test_gear_shape():
@@ -615,8 +616,7 @@ def test_design_tokens():
     한 군데라도 숫자를 직접 적기 시작하면 원래대로 돌아간다.
     """
     import re
-    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "main.py"), encoding="utf-8").read()
+    src = open(os.path.join(APP_DIR, "main.py"), encoding="utf-8").read()
     body = src.split("# ── 디자인 토큰", 1)[1].split("\n", 1)[1]
     body = body.split("R_PANEL    = 16", 1)[1]      # 정의부는 건너뛴다
 
@@ -758,8 +758,7 @@ def test_window_roles():
         types.MethodType(main.NotesWindow._on_close, w)()
         assert quit_called == [True], "Notes의 X가 앱을 끝내지 않았다"
         # _on_close를 부르면 채팅만 내려가고 창이 안 닫힌다 — 그 자리로 새지 않게
-        src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                "main.py"), encoding="utf-8").read()
+        src = open(os.path.join(APP_DIR, "main.py"), encoding="utf-8").read()
         assert "self.master.quit_app()" in src
         assert "self.master._on_close()" not in src
         assert config.get("notes_open") is True

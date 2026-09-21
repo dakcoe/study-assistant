@@ -19,7 +19,8 @@ if getattr(sys, "frozen", False):
         APP_DIR = os.path.expanduser("~/Library/Application Support/StudyAI")
     os.makedirs(APP_DIR, exist_ok=True)
 else:
-    APP_DIR = os.path.dirname(os.path.abspath(__file__))
+    # 소스로 돌 때는 저장소 루트. app/ 안에 흩어 두면 소스와 섞인다.
+    APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # 자동 저장은 지우는 장치가 없으면 계속 쌓인다. 되찾으려고 두는 것이라
 # 한 달이면 충분하다. 0으로 두면 안 지운다.

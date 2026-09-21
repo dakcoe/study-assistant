@@ -73,6 +73,7 @@ SYSTEM_SOURCE  = APP_PREFIX + "SYSTEM"
 
 def helper_path():
     """audio_capture 헬퍼 경로. .app 안에서는 번들에 포함된 것을 쓴다."""
+    # 묶으면 번들 루트에, 소스로 돌 때는 이 파일 옆(app/)에 있다
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     path = os.path.join(base, "audio_capture")
     if os.path.exists(path) and not os.access(path, os.X_OK):

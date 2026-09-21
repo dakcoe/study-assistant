@@ -5,11 +5,15 @@
 #   - .app 번들 대신 폴더 하나(dist/StudyAI/)가 나온다. 그 안의 StudyAI.exe가 실행 파일.
 #   - 권한 설명 키(Info.plist)는 Windows에 해당 사항이 없다.
 
+# 경로는 이 파일 위치(SPECPATH) 기준으로 잡는다. 어느 폴더에서 실행하든 같다.
+import os
+ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
+
 a = Analysis(
-    ["main.py"],
-    pathex=[],
+    [os.path.join(ROOT, "app", "main.py")],
+    pathex=[os.path.join(ROOT, "app")],
     binaries=[],
-    datas=[("assets", "assets")],
+    datas=[(os.path.join(ROOT, "assets"), "assets")],
     hiddenimports=["sounddevice", "customtkinter", "soundcard"],
     hookspath=[],
     runtime_hooks=[],
@@ -28,7 +32,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,          # 콘솔 창 안 뜨게
-    icon="assets/AppIcon.ico",
+    icon=os.path.join(ROOT, "assets", "AppIcon.ico"),
 )
 
 coll = COLLECT(

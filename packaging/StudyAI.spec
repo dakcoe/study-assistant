@@ -6,15 +6,19 @@
 
 block_cipher = None
 
+# 경로는 이 파일 위치(SPECPATH) 기준으로 잡는다. 어느 폴더에서 실행하든 같다.
+import os
+ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
+
 a = Analysis(
-    ["main.py"],
-    pathex=[],
+    [os.path.join(ROOT, "app", "main.py")],
+    pathex=[os.path.join(ROOT, "app")],
     binaries=[],
     # ScreenCaptureKit 헬퍼. 이게 있어야 가상 오디오 장치 없이 앱 소리를 잡는다.
     # 아이콘 폰트(Material Icons, Apache-2.0). 번들에 넣고 실행할 때 이 프로세스에만
     # 등록하므로, 앱을 받은 사람 컴퓨터에 폰트를 설치할 필요가 없다.
     # assets/ 에 아이콘 폰트와 도움말 그림이 함께 들어 있다.
-    datas=[("audio_capture", "."), ("assets", "assets")],
+    datas=[(os.path.join(ROOT, "app", "audio_capture"), "."), (os.path.join(ROOT, "assets"), "assets")],
     hiddenimports=["sounddevice", "customtkinter"],
     hookspath=[],
     runtime_hooks=[],
@@ -52,7 +56,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="Study AI.app",
-    icon="assets/AppIcon.icns",
+    icon=os.path.join(ROOT, "assets", "AppIcon.icns"),
     bundle_identifier="com.superbleo.studyai",
     info_plist={
         # 이게 없으면 macOS가 영어 앱으로 보고 저장 패널과 시스템 폴더 이름을

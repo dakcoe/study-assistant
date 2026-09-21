@@ -1,16 +1,16 @@
 #!/bin/bash
 # Study AI 빌드 — .app 생성부터 /Applications 설치까지 한 번에.
 #
-#   ./build.sh          코드가 바뀐 것만 다시 빌드
-#   ./build.sh --swift  Swift 헬퍼까지 강제로 다시 컴파일
-#   ./build.sh --force  실행 중인 Study AI를 종료하고 빌드 (기본은 거부)
+#   packaging/build.sh          코드가 바뀐 것만 다시 빌드
+#   packaging/build.sh --swift  Swift 헬퍼까지 강제로 다시 컴파일
+#   packaging/build.sh --force  실행 중인 Study AI를 종료하고 빌드 (기본은 거부)
 #
 # 헬퍼(audio_capture)를 다시 컴파일하면 서명 해시가 바뀌고, macOS는 이를 처음 보는
 # 프로그램으로 판단해 화면 기록 권한을 다시 묻는다. 그래서 .swift가 바뀌지 않았으면
 # 건드리지 않는다.
 
 set -e
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."     # 저장소 루트에서 돈다
 
 # --force / --swift 는 순서 상관없이 받는다
 FORCE=0
@@ -25,9 +25,9 @@ DEST="/Applications/Study AI.app"
 BUNDLE_ID="com.superbleo.studyai"
 
 # ── 1. Swift 헬퍼 (필요할 때만) ────────────────────────────────────────────────
-if [ "$SWIFT" = "1" ] || [ ! -f audio_capture ] || [ audio_capture.swift -nt audio_capture ]; then
+if [ "$SWIFT" = "1" ] || [ ! -f app/audio_capture ] || [ app/audio_capture.swift -nt app/audio_capture ]; then
     echo "▶ Swift 헬퍼 컴파일"
-    swiftc -O audio_capture.swift -o audio_capture
+    swiftc -O app/audio_capture.swift -o app/audio_capture
     echo "  ⚠ 헬퍼가 새로 빌드됨 — 화면 기록 권한을 다시 물어볼 수 있습니다"
 else
     echo "▶ Swift 헬퍼 변경 없음 — 건너뜀 (권한 유지)"
@@ -40,7 +40,7 @@ if pgrep -f "StudyAI" >/dev/null 2>&1; then
         echo "▶ 실행 중인 Study AI 종료 (--force)"
     else
         echo "✋ Study AI가 실행 중입니다. 녹음 중이면 메모부터 저장하세요."
-        echo "   종료하고 빌드하려면: ./build.sh --force"
+        echo "   종료하고 빌드하려면: packaging/build.sh --force"
         exit 1
     fi
 fi
@@ -49,7 +49,7 @@ sleep 1
 
 # ── 3. .app 빌드 ─────────────────────────────────────────────────────────────
 echo "▶ PyInstaller"
-.venv/bin/python -m PyInstaller --noconfirm --clean StudyAI.spec >/dev/null 2>&1
+.venv/bin/python -m PyInstaller --noconfirm --clean packaging/StudyAI.spec >/dev/null 2>&1
 
 # ── 3-1. 한국어 번들로 표시 ───────────────────────────────────────────────────
 # Info.plist의 CFBundleLocalizations만으로는 부족하고, .lproj 폴더가 실제로
