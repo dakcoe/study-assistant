@@ -1593,10 +1593,10 @@ class NotesWindow(ctk.CTkToplevel):
         self.top_frame.grid(row=0, column=0, columnspan=2, sticky="ew",
                             padx=SP_ITEM, pady=(SP_ITEM, SP_SNUG))
 
-        ctk.CTkLabel(self.top_frame, text="Voice Notes",
-                     font=(FONT_UI, FS_BODY, "bold"),
-                     text_color=t["text_primary"]).pack(side="left",
-                                                        padx=SP_ITEM, pady=SP_SNUG)
+        self._title_lbl = ctk.CTkLabel(self.top_frame, text="Voice Notes",
+                                       font=(FONT_UI, FS_BODY, "bold"),
+                                       text_color=t["text_primary"])
+        self._title_lbl.pack(side="left", padx=SP_ITEM, pady=SP_SNUG)
 
         # 채팅 창이 내려가 있으면 그쪽 스위치에 손댈 수 없다. 같은 변수를 물려
         # 여기서도 켜고 끈다 — 두 창이 늘 같은 상태를 보인다.
@@ -1806,6 +1806,23 @@ class NotesWindow(ctk.CTkToplevel):
     def apply_theme(self, t):
         self._t = t
         self.configure(fg_color=t["app_bg"])
+
+        # 상단 바 — 여기를 빠뜨려서 밝은 테마에서도 검은 띠가 남아 있었다
+        self.top_frame.configure(fg_color=t["panel_bg"], bg_color=t["app_bg"])
+        self._title_lbl.configure(text_color=t["text_primary"])
+        self.aot_switch.configure(text_color=t["text_primary"],
+                                  progress_color=t["accent"])
+        if ICON_FONT_OK:
+            self.settings_btn.configure(fg_color=t["btn_sec_bg"],
+                                        hover_color=t["btn_sec_hover"],
+                                        text_color=t["btn_sec_text"])
+        else:
+            self.settings_btn.set_colors(t["btn_sec_bg"], t["btn_sec_hover"],
+                                         t["btn_sec_text"], t["panel_bg"])
+        self.help_btn.configure(fg_color=t["btn_sec_bg"],
+                                hover_color=t["btn_sec_hover"],
+                                text_color=t["btn_sec_text"])
+
         self._orig_header.configure(text_color=t["text_muted"])
         self.original_text.configure(fg_color=t["panel_bg"], text_color=t["text_primary"])
         self._trans_header.configure(text_color=t["text_muted"])

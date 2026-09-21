@@ -709,6 +709,38 @@ def test_translation_batching():
     assert w.translated == [], "끄면서 번역을 보내면 안 된다"
 
 
+def test_notes_follows_theme():
+    """테마를 바꾸면 노트 창이 전부 따라오는가.
+
+    상단 바를 나중에 붙이면서 apply_theme에 넣는 걸 빠뜨려, 밝은 테마에서도
+    검은 띠가 남아 있었다. 창을 실제로 만들어 색을 확인한다.
+    """
+    import customtkinter as ctk
+
+    class Root(ctk.CTk):
+        _theme_name = "dark"
+
+    root = Root()
+    root.withdraw()
+    import tkinter as tk
+    root._aot_var = tk.BooleanVar(master=root, value=True)
+    root._toggle_aot = lambda: None
+    stt = types.SimpleNamespace(language="en", running=False, include_mic=False,
+                                state=None)
+    try:
+        w = main.NotesWindow(root, stt)
+        for name, theme in main.THEMES.items():
+            w.apply_theme(theme)
+            got = w.top_frame.cget("fg_color")
+            assert got == theme["panel_bg"], (name, got, theme["panel_bg"])
+            assert w.help_btn.cget("fg_color") == theme["btn_sec_bg"], name
+            assert w._title_lbl.cget("text_color") == theme["text_primary"], name
+            # 본문도 같이 따라와야 한다
+            assert w.original_text.cget("fg_color") == theme["panel_bg"], name
+    finally:
+        root.destroy()
+
+
 def test_window_roles():
     """창을 닫았을 때 화면에 아무것도 안 남는 조합이 없는가.
 
