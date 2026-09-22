@@ -1340,6 +1340,12 @@ class SettingsDialog(ctk.CTkToplevel):
         self._slider.set(parent._blur_opacity * 100)
         self._slider.pack(side="left", fill="x", expand=True, padx=(0, SP_SNUG))
 
+        # 만든 사람 — 기본 탭 맨 아래에 조용히 둔다
+        self._credit = ctk.CTkLabel(
+            self._pages["기본"], text="제작자: 이수현 (슬기짜기)",
+            font=(FONT_UI, FS_CAPTION), text_color=t["text_muted"], anchor="w")
+        self._credit.pack(fill="x", padx=SP_SECTION, pady=(SP_ITEM, SP_SNUG))
+
         # 남은 한도 — 여기부터는 '한도' 탭에 담는다
         page = self._pages["한도"]
         r = row((0, SP_TIGHT))
