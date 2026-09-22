@@ -150,6 +150,34 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
+          # 받는 사람이 어떤 파일을 골라야 하는지가 맨 위에 오게 한다.
+          # 아래에 커밋 목록이 자동으로 붙는다.
+          generate_release_notes: true
+          body: |
+            ### 어떤 파일을 받아야 하나요?
+
+            | 쓰는 컴퓨터 | 받을 파일 |
+            |---|---|
+            | 맥 (2020년 이후 · M1~M4) | `StudyAI-macOS-AppleSilicon.dmg` |
+            | 맥 (2020년 이전 · 인텔) | `StudyAI-macOS-Intel.dmg` |
+            | 윈도우 | `StudyAI-Windows-x64.zip` |
+            | 윈도우 (ARM 노트북) | `StudyAI-Windows-arm64.zip` |
+
+            맥 사양은 왼쪽 위 사과 → **이 Mac에 관하여**에서 확인합니다.
+            `Apple M…`이라고 쓰여 있으면 Apple Silicon입니다.
+            윈도우는 **설정 → 시스템 → 정보 → 시스템 종류**를 봅니다.
+
+            ### 설치
+
+            파일 안에 **시작하기.html** 이 같이 들어 있습니다. 두 번 누르면
+            브라우저로 열리고, 설치부터 API 키 넣기까지 네 단계로 안내합니다.
+
+            처음 열 때 나오는 보안 경고는 개발자 등록을 하지 않은 앱이라
+            나오는 것입니다. 한 번만 허용하면 그 뒤로는 그냥 열립니다.
+
+            자세한 내용은 [README](https://github.com/dakcoe/study-assistant#readme)에 있습니다.
+
+            ---
           files: |
             out/**/*.dmg
             out/*.zip
