@@ -1927,6 +1927,22 @@ class NotesWindow(ctk.CTkToplevel):
         except OSError:
             pass        # 자동 저장이 실패해도 받아적기는 계속돼야 한다
 
+    def show_gap(self, line):
+        """소리가 끊기고 다시 붙은 자리를 눈에 띄게 남긴다.
+
+        나중에 "어디부터 다시 들어야 하나"를 알 수 있어야 한다. 받아적힌 글과
+        섞이지 않게 흐린 색으로 넣고, 자동 저장에도 같은 줄을 남긴다.
+        """
+        tb = self.original_text._textbox
+        at_bot = self._at_bottom(tb)
+        start = tb.index("end-1c")
+        tb.insert("end", line + "\n")
+        tb.tag_add("gap", start, "end-1c")
+        tb.tag_config("gap", foreground=self._t["status_process"])
+        if at_bot:
+            tb.see("end")
+        self._autosave(line)
+
     def show_confirmed(self, text):
         text = self._sanitize_stt(text)
         if not text:
@@ -2851,6 +2867,7 @@ class StudyAssistant(ctk.CTk):
                 on_state_change=self._stt_state,
                 on_error=self._stt_error,
                 on_notice=self._stt_notice,
+                on_gap=self._stt_gap,
             )
         return self._stt
 
@@ -2903,6 +2920,9 @@ class StudyAssistant(ctk.CTk):
         self._notepad.focus()
         self._notepad.sync_chat_btn()
         config.set("notes_open", True)
+
+    def _stt_gap(self, line):
+        self._q.put(lambda t=line: self._notepad and self._notepad.show_gap(t))
 
     def _stt_confirmed(self, text):
         self._q.put(lambda t=text: self._notepad and self._notepad.show_confirmed(t))

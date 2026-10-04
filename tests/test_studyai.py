@@ -22,6 +22,51 @@ import main
 import stt_engine
 
 
+def test_capture_restart():
+    """앱 소리가 끊겼을 때 조용히 멈추지 않고 다시 붙는가.
+
+    예전에는 헬퍼가 죽으면 리더 스레드만 끝나고 화면은 계속 '청취 중'이었다.
+    강의 85분 중 30분만 남은 적이 있다. 끊긴 자리를 노트에 적고, 몇 번 다시
+    붙여 보고, 그래도 안 되면 멈춘 것을 분명히 알려야 한다.
+    """
+    gaps, errors, spawned = [], [], []
+
+    e = stt_engine.STTEngine(on_error=errors.append, on_gap=gaps.append)
+    e._running = True
+    e._app_target = ("com.google.Chrome", None)
+
+    real_popen, real_thread, real_wait = (stt_engine.subprocess.Popen,
+                                          stt_engine.threading.Thread,
+                                          stt_engine.RESTART_WAIT)
+    stt_engine.RESTART_WAIT = 0
+    stt_engine.subprocess.Popen = lambda *a, **k: spawned.append(a) or types.SimpleNamespace(
+        stdout=None, stderr=[], poll=lambda: None)
+    stt_engine.threading.Thread = lambda *a, **k: types.SimpleNamespace(start=lambda: None)
+    try:
+        # 첫 끊김 — 다시 붙고, 끊긴 자리를 노트에 남긴다
+        assert e._restart_capture(got_any=True) is True
+        assert len(spawned) == 1, spawned
+        assert gaps and "끊겼" in gaps[0], gaps
+        assert e._running is True, "한 번 끊겼다고 멈추면 안 된다"
+
+        # 소리가 다시 들어오면 복구를 알리고 시도 횟수를 되돌린다
+        e._restart_capture(got_any=True)
+        assert any("다시 연결" in g for g in gaps), gaps
+        assert e._restarts == 1, e._restarts
+
+        # 연속으로 실패하면 멈추고 알린다
+        for _ in range(stt_engine.MAX_RESTARTS):
+            e._restart_capture(got_any=False)
+        assert e._running is False, "계속 실패하는데 녹음 중으로 남았다"
+        assert errors and "멈춥니다" in errors[-1], errors
+        # 같은 상태면 콜백이 안 가므로 엔진의 상태값을 본다
+        assert e.state == stt_engine.STTState.IDLE, e.state
+    finally:
+        stt_engine.subprocess.Popen = real_popen
+        stt_engine.threading.Thread = real_thread
+        stt_engine.RESTART_WAIT = real_wait
+
+
 def test_loopback_thread_setup():
     """윈도우 루프백을 도는 스레드가 COM을 켜고 장치도 거기서 잡는가.
 

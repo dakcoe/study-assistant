@@ -67,6 +67,11 @@ class STTState(Enum):
 DEFAULT_DEVICE_LABEL = "시스템 기본값"
 
 # 앱 소리를 잡을 때 쓰는 접두사. 접두사가 없으면 마이크 이름으로 본다.
+# 캡처가 끊겼을 때 다시 붙이는 횟수와 간격. 화면이 잠들거나 대상 앱이 소리를
+# 멈추면 ScreenCaptureKit이 스트림을 끊는다 — 그때 조용히 멈추지 않게 한다.
+MAX_RESTARTS   = 5
+RESTART_WAIT   = 2.0
+
 APP_PREFIX     = "app:"
 SYSTEM_SOURCE  = APP_PREFIX + "SYSTEM"
 
@@ -82,6 +87,15 @@ def helper_path():
         except OSError:
             pass
     return path
+
+
+def _log(msg):
+    """엔진에서 일어난 일을 파일에 남긴다. 화면 알림은 지나가면 사라진다."""
+    try:
+        with open(os.path.join(config.APP_DIR, "stt.log"), "a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {msg}\n")
+    except OSError:
+        pass
 
 
 def _resample(block, out_len):
@@ -138,7 +152,7 @@ def _resolve_device(name):
 class STTEngine:
     def __init__(self, language="ko", device="", include_mic=False, mic_device="",
                  on_confirmed=None, on_state_change=None, on_error=None,
-                 on_notice=None):
+                 on_notice=None, on_gap=None):
         self.language = language
         self.device = device        # 장치 이름 (빈 값이면 시스템 기본값)
         # 앱 소리를 잡을 때 내 목소리도 함께 받을지. 마이크 입력일 때는 의미가 없다.
@@ -149,6 +163,11 @@ class STTEngine:
         self._on_state_change = on_state_change or (lambda s: None)
         self._on_error        = on_error        or (lambda m: None)
         self._on_notice       = on_notice       or (lambda m: None)
+        self._on_gap          = on_gap          or (lambda m: None)
+        self._app_target      = None    # (번들ID, 큐) — 끊겼을 때 다시 붙일 대상
+        self._awake           = None    # 화면 잠들기를 막는 프로세스
+        self._restarts        = 0
+        self._gap_since       = None    # 끊긴 시각
 
         self.state    = STTState.IDLE
         self._running = False
@@ -177,6 +196,7 @@ class STTEngine:
                 return
             self._running = True
 
+        self._keep_awake(True)
         self._last_text = ""
         # 큐를 비워서 재사용하지 않고 매번 새로 만든다. 예전에는 비워 썼는데,
         # stop() 직후 곧바로 start()가 불리면(장치 변경 등) 옛 스레드가 종료신호를
@@ -248,11 +268,43 @@ class STTEngine:
             self._on_error(f"입력 장치를 열 수 없습니다: {e}")
             return False
 
+    def _keep_awake(self, on):
+        """녹음 중에는 화면이 잠들지 않게 한다.
+
+        화면이 잠들면 ScreenCaptureKit이 스트림을 끊는다. 강의를 틀어 놓고
+        자리를 비우면 그때 녹음이 멈췄다 — 끊긴 뒤 다시 붙이는 것보다
+        애초에 안 끊기게 하는 쪽이 낫다.
+        """
+        if config.WINDOWS:
+            try:
+                import ctypes
+                # ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
+                flags = 0x80000000 | 0x00000001 | 0x00000002 if on else 0x80000000
+                ctypes.windll.kernel32.SetThreadExecutionState(flags)
+            except Exception:
+                pass
+            return
+
+        if on:
+            if self._awake is None:
+                try:
+                    self._awake = subprocess.Popen(["caffeinate", "-dimsu"])
+                except Exception:
+                    self._awake = None
+            return
+        if self._awake is not None:
+            try:
+                self._awake.terminate()
+            except Exception:
+                pass
+            self._awake = None
+
     def stop(self):
         with self._lock:
             if not self._running:
                 return
             self._running = False
+        self._keep_awake(False)
 
         if self._stream is not None:
             try:
@@ -300,6 +352,7 @@ class STTEngine:
             self._on_error("audio_capture 헬퍼를 찾을 수 없습니다")
             self._set_state(STTState.IDLE)
             return False
+        self._app_target = (bundle_id, target)   # 끊기면 이걸로 다시 붙인다
         try:
             self._proc = subprocess.Popen(
                 [path, "--capture", bundle_id],
@@ -385,17 +438,76 @@ class STTEngine:
         return True
 
     def _pipe_reader(self, proc, target):
-        """16bit LE 모노 PCM을 블록 단위로 읽어 float32로 바꾼다."""
+        """16bit LE 모노 PCM을 블록 단위로 읽어 float32로 바꾼다.
+
+        헬퍼는 스스로 죽을 수 있다 — 화면이 잠들거나 대상 앱이 소리를 멈추면
+        ScreenCaptureKit이 스트림을 끊고, 헬퍼는 거기서 종료한다. 예전에는 그때
+        이 함수가 조용히 끝나 VAD까지 멈췄는데 화면은 계속 '청취 중'이었다.
+        (강의 85분 중 30분만 남은 적이 있다.) 이제는 다시 붙는다.
+        """
         nbytes = BLOCK_SIZE * 2
+        got_any = False
         while self._running and proc.poll() is None:
             buf = proc.stdout.read(nbytes)
             if not buf:
                 break
             if len(buf) < nbytes:
                 buf += b"\x00" * (nbytes - len(buf))
+            got_any = True
             target.put(
                 np.frombuffer(buf, dtype="<i2").astype(np.float32) / 32768.0)
+
+        if self._running and self._restart_capture(got_any):
+            return                  # 새 리더가 이어받았다. 큐를 닫지 않는다.
         target.put(None)            # 다음 단계(믹서 또는 VAD) 깨우기
+
+    def _restart_capture(self, got_any):
+        """끊긴 앱 소리 캡처를 다시 붙인다. 성공하면 True.
+
+        소리가 한 번이라도 들어왔으면 시도 횟수를 되돌린다 — 긴 강의에서 여러 번
+        끊겨도 그때마다 새로 센다. 연속으로 실패하면 멈추고 사용자에게 알린다.
+        """
+        if not self._app_target:
+            return False
+        if got_any:
+            self._restarts = 0
+            if self._gap_since is not None:
+                lost = int(time.time() - self._gap_since)
+                self._on_gap(f"── {time.strftime('%H:%M:%S')} 다시 연결됨 "
+                             f"(약 {lost // 60}분 {lost % 60}초 빠짐) ──")
+                self._gap_since = None
+        if self._restarts >= MAX_RESTARTS:
+            _log("소리 캡처를 다시 붙이지 못했습니다")
+            self._on_error("소리 캡처가 끊겨 녹음을 멈춥니다. 다시 시작해 주세요.")
+            self._running = False
+            self._keep_awake(False)
+            self._set_state(STTState.IDLE)
+            return False
+
+        self._restarts += 1
+        if self._gap_since is None:
+            self._gap_since = time.time()
+            self._on_gap(f"── {time.strftime('%H:%M:%S')} 소리가 끊겼습니다 "
+                         f"— 여기서부터 빠졌을 수 있습니다 ──")
+        _log(f"소리 캡처가 끊겨 다시 붙입니다 ({self._restarts}/{MAX_RESTARTS})")
+        self._on_notice("소리 캡처가 끊겨 다시 연결합니다")
+        time.sleep(RESTART_WAIT)
+        if not self._running:
+            return False
+
+        bundle_id, target = self._app_target
+        path = helper_path()
+        try:
+            self._proc = subprocess.Popen([path, "--capture", bundle_id],
+                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except Exception as e:
+            _log(f"다시 붙이기 실패: {e}")
+            return self._restart_capture(False)
+
+        threading.Thread(target=self._pipe_reader, args=(self._proc, target),
+                         daemon=True).start()
+        threading.Thread(target=self._pipe_errors, args=(self._proc,), daemon=True).start()
+        return True
 
     def _pipe_errors(self, proc):
         """헬퍼가 stderr로 뱉는 오류(주로 권한 문제)를 UI로 올린다."""
